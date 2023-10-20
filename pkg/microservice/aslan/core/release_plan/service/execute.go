@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 
 	"github.com/koderover/zadig/pkg/microservice/aslan/config"
 	"github.com/koderover/zadig/pkg/microservice/aslan/core/common/repository/models"
@@ -53,9 +54,9 @@ func NewReleaseJobExecutor(c *ExecuteReleaseJobContext, args *ExecuteReleaseJobA
 }
 
 type TextReleaseJobExecutor struct {
-	ID         string
-	ExecutedBy string
-	Spec       TextReleaseJobSpec
+	ID   string
+	Ctx  *ExecuteReleaseJobContext
+	Spec TextReleaseJobSpec
 }
 
 type TextReleaseJobSpec struct {
@@ -68,7 +69,7 @@ func NewTextReleaseJobExecutor(c *ExecuteReleaseJobContext, args *ExecuteRelease
 		return nil, errors.Wrap(err, "invalid spec")
 	}
 	executor.ID = args.ID
-	executor.ExecutedBy = c.UserName
+	executor.Ctx = c
 	return &executor, nil
 }
 
@@ -77,6 +78,9 @@ func (e *TextReleaseJobExecutor) Execute(plan *models.ReleasePlan) error {
 	for _, job := range plan.Jobs {
 		if job.ID != e.ID {
 			continue
+		}
+		if !lo.Contains([]string{plan.ManagerID, job.ManagerID}, e.Ctx.UserID) {
+			return ErrPermissionDenied
 		}
 		if err := models.IToi(job.Spec, spec); err != nil {
 			return errors.Wrap(err, "invalid spec")
@@ -87,7 +91,7 @@ func (e *TextReleaseJobExecutor) Execute(plan *models.ReleasePlan) error {
 		spec.Remark = e.Spec.Remark
 		job.Spec = spec
 		job.Status = config.ReleasePlanJobStatusDone
-		job.ExecutedBy = e.ExecutedBy
+		job.ExecutedBy = e.Ctx.UserName
 		job.ExecutedTime = time.Now().Unix()
 		return nil
 	}
@@ -118,6 +122,9 @@ func (e *WorkflowReleaseJobExecutor) Execute(plan *models.ReleasePlan) error {
 	for _, job := range plan.Jobs {
 		if job.ID != e.ID {
 			continue
+		}
+		if !lo.Contains([]string{plan.ManagerID, job.ManagerID}, e.Ctx.UserID) {
+			return ErrPermissionDenied
 		}
 		if err := models.IToi(job.Spec, spec); err != nil {
 			return errors.Wrap(err, "invalid spec")

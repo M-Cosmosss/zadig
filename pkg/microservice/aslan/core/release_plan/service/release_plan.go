@@ -346,6 +346,11 @@ func UpdateReleasePlanStatus(c *handler.Context, planID, status string) error {
 	}
 	plan.Status = config.ReleasePlanStatus(status)
 
+	// sometimes when status change to executing, all release job status have been done
+	if plan.Status == config.StatusExecuting && checkReleasePlanJobsAllDone(plan) {
+		plan.SuccessTime = time.Now().Unix()
+		plan.Status = config.StatusSuccess
+	}
 	if err = mongodb.NewReleasePlanColl().UpdateByID(ctx, planID, plan); err != nil {
 		return errors.Wrap(err, "update plan")
 	}
